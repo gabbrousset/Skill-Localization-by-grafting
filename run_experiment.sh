@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
 # Required environment variables:
 # TAG: tag for the trail
 # TYPE: finetune / prompt / prompt-demo  
@@ -6,6 +9,44 @@
 # LR: learning rate (recommendation: 1e-5 / 2e-5 / 5e-5)
 # SEED: random seed (13 / 21 / 42 / 87 / 100)
 # MODEL: pre-trained model name (roberta-*, bert-*), see Transformers model list
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cd "$SCRIPT_DIR"
+
+required_vars=(
+    TAG TYPE TASK K BS LR SEED MODEL max_step modelseed uselmhead useCLS
+    fixhead fixembeddings train_bias_only
+)
+
+for var_name in "${required_vars[@]}"; do
+    if [ -z "${!var_name:-}" ]; then
+        echo "Missing required environment variable: $var_name" >&2
+        exit 2
+    fi
+done
+
+MODELNAME=${MODELNAME:-$MODEL}
+MODELNAME_SAFE=${MODELNAME//\//__}
+if [ -z "${DATA_ROOT:-}" ]; then
+    if [ -d ../data/k-shot ]; then
+        DATA_ROOT=../data/k-shot
+    else
+        DATA_ROOT=data/k-shot
+    fi
+fi
+LOG_ROOT=${LOG_ROOT:-log_files}
+CKPT_ROOT=${CKPT_ROOT:-ckpt_paths}
+MODEL_CACHE_DIR=${MODEL_CACHE_DIR:-model_files}
+export WANDB_DISABLED=${WANDB_DISABLED:-true}
+export WANDB_MODE=${WANDB_MODE:-disabled}
+
+if [ -z "${PYTHON_BIN:-}" ]; then
+    if command -v uv >/dev/null 2>&1; then
+        PYTHON_BIN="uv run --project . python"
+    else
+        PYTHON_BIN="python"
+    fi
+fi
 
 # Number of training instances per label
 #K=16
@@ -116,62 +157,77 @@ esac
 # a maximum batch size of 2 when using large-size models. So we use gradient
 # accumulation steps to achieve the same effect of larger batch sizes.
 REAL_BS=2
-GS=$(expr $BS / $REAL_BS)
+GS=$(expr "$BS" / "$REAL_BS")
 
 
 # Use a random number to distinguish different trails (avoid accidental overwriting)
 TRIAL_IDTF=$RANDOM
-DATA_DIR=../data/k-shot/$TASK/$K-$SEED
-modelseed=$modelseed
-log_file_store=../log_files/log_noembed_SGD_graft
-output_dir=../ckpt_paths/log_noembed_SGD_graft/$TASK-$TYPE-$K-$SEED-$MODELNAME-$TRIAL_IDTF-$REAL_BS-$LR
+DATA_DIR=$DATA_ROOT/$TASK/$K-$SEED
+log_file_store=$LOG_ROOT/log_noembed_SGD_graft
+output_dir=$CKPT_ROOT/log_noembed_SGD_graft/$TASK-$TYPE-$K-$SEED-$MODELNAME_SAFE-$TRIAL_IDTF-$REAL_BS-$LR
+
+mkdir -p "$(dirname "$log_file_store")" "$(dirname "$output_dir")" "$MODEL_CACHE_DIR"
+
+if [ ! -d "$DATA_DIR" ]; then
+    echo "Missing data directory: $DATA_DIR" >&2
+    echo "Prepare LM-BFF k-shot data or set DATA_ROOT to the directory containing <TASK>/<K>-<SEED>." >&2
+    exit 1
+fi
 
 
 
-if [ $MODEL == 'roberta-base' ]; then
+if [[ "$MODEL" == *roberta* ]]; then
     len=128;
-elif [ $MODEL == 'gpt2' ]; then
+elif [[ "$MODEL" == *gpt* ]]; then
     len=256;
+else
+    echo "Unsupported MODEL '$MODEL'. Expected a RoBERTa- or GPT-compatible model." >&2
+    exit 2
 fi    
 
+MODEL_PATH=$MODEL
+if [ "${RESOLVE_HF_MODELS:-true}" != "false" ]; then
+    MODEL_PATH=$($PYTHON_BIN tools/cache_hf_model.py "$MODEL" --cache-dir "$MODEL_CACHE_DIR")
+fi
 
 
-python run.py \
-  --task_name $TASK \
-  --data_dir $DATA_DIR \
+
+$PYTHON_BIN run.py \
+  --task_name "$TASK" \
+  --data_dir "$DATA_DIR" \
   --overwrite_output_dir \
   --do_train \
   --do_eval \
   --do_predict \
-  --model_name_or_path $MODEL \
-  --cache_dir model_files \
-  --few_shot_type $TYPE \
-  --num_k $K \
-  --max_seq_length $len \
-  --max_length_per_example $len \
-  --per_device_train_batch_size $REAL_BS \
+  --model_name_or_path "$MODEL_PATH" \
+  --cache_dir "$MODEL_CACHE_DIR" \
+  --few_shot_type "$TYPE" \
+  --num_k "$K" \
+  --max_seq_length "$len" \
+  --max_length_per_example "$len" \
+  --per_device_train_batch_size "$REAL_BS" \
   --per_device_eval_batch_size 16 \
-  --gradient_accumulation_steps $GS \
-  --learning_rate $LR \
-  --max_steps $MAX_STEP \
-  --logging_steps $EVAL_STEP \
-  --eval_steps $EVAL_STEP \
+  --gradient_accumulation_steps "$GS" \
+  --learning_rate "$LR" \
+  --max_steps "$MAX_STEP" \
+  --logging_steps "$EVAL_STEP" \
+  --eval_steps "$EVAL_STEP" \
   --num_train_epochs 0 \
-  --output_dir $output_dir \
-  --seed $modelseed \
-  --tag $TAG \
-  --template $TEMPLATE \
-  --mapping $MAPPING \
-  --optimizer SGD\
-  --use_lm_head $uselmhead\
-  --weight_decay 1e-4\
-  --log_file_store $log_file_store\
-  --use_CLS_linearhead $useCLS \
-  --fix_head $fixhead\
-  --fix_embeddings $fixembeddings\
-  --train_bias_only $train_bias_only\
+  --output_dir "$output_dir" \
+  --seed "$modelseed" \
+  --tag "$TAG" \
+  --template "$TEMPLATE" \
+  --mapping "$MAPPING" \
+  --optimizer SGD \
+  --use_lm_head "$uselmhead" \
+  --weight_decay 1e-4 \
+  --log_file_store "$log_file_store" \
+  --use_CLS_linearhead "$useCLS" \
+  --fix_head "$fixhead" \
+  --fix_embeddings "$fixembeddings" \
+  --train_bias_only "$train_bias_only" \
   $TASK_EXTRA \
-  $1 
+  "$@"
 
 # Delete the checkpoint 
 # Since we need to run multiple trials, saving all the checkpoints takes 

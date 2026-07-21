@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
 # Required environment variables:
 # TAG: tag for the trail
 # TYPE: finetune / prompt / prompt-demo  
@@ -6,6 +9,43 @@
 # LR: learning rate (recommendation: 1e-5 / 2e-5 / 5e-5)
 # SEED: random seed (13 / 21 / 42 / 87 / 100)
 # MODEL: pre-trained model name (roberta-*, bert-*), see Transformers model list
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cd "$SCRIPT_DIR"
+
+required_vars=(
+    TYPE TASK K LR SEED MODEL uselmhead useCLS num_train_epochs mask_path
+    sparsitylevel pretrained_model fixhead fixembeddings truncate_head
+    train_bias_only no_train checkpoint_location
+)
+
+for var_name in "${required_vars[@]}"; do
+    if [ -z "${!var_name:-}" ]; then
+        echo "Missing required environment variable: $var_name" >&2
+        exit 2
+    fi
+done
+
+if [ -z "${DATA_ROOT:-}" ]; then
+    if [ -d ../data/k-shot ]; then
+        DATA_ROOT=../data/k-shot
+    else
+        DATA_ROOT=data/k-shot
+    fi
+fi
+LOG_ROOT=${LOG_ROOT:-log_files}
+MODEL_CACHE_DIR=${MODEL_CACHE_DIR:-model_files}
+GRAFT_OUTPUT_DIR=${GRAFT_OUTPUT_DIR:-temp}
+export WANDB_DISABLED=${WANDB_DISABLED:-true}
+export WANDB_MODE=${WANDB_MODE:-disabled}
+
+if [ -z "${PYTHON_BIN:-}" ]; then
+    if command -v uv >/dev/null 2>&1; then
+        PYTHON_BIN="uv run --project . python"
+    else
+        PYTHON_BIN="python"
+    fi
+fi
 
 # Number of training instances per label
 #K=16
@@ -110,47 +150,65 @@ esac
 # For medium-sized GPUs (e.g., 2080ti with 10GB memory), they can only take 
 # a maximum batch size of 2 when using large-size models. So we use gradient
 # accumulation steps to achieve the same effect of larger batch sizes.
-DATA_DIR=../data/k-shot/$TASK/$K-$SEED
-log_file_store=../log_files/log_noembed_SGD_graft
+DATA_DIR=$DATA_ROOT/$TASK/$K-$SEED
+log_file_store=$LOG_ROOT/log_noembed_SGD_graft
 
-if [ $pretrained_model == 'roberta-base' ]; then
+mkdir -p "$(dirname "$log_file_store")" "$MODEL_CACHE_DIR" "$GRAFT_OUTPUT_DIR"
+
+if [ ! -d "$DATA_DIR" ]; then
+    echo "Missing data directory: $DATA_DIR" >&2
+    echo "Prepare LM-BFF k-shot data or set DATA_ROOT to the directory containing <TASK>/<K>-<SEED>." >&2
+    exit 1
+fi
+
+if [[ "$pretrained_model" == *roberta* ]]; then
     len=128;
-elif [ $pretrained_model == 'gpt2' ]; then
+elif [[ "$pretrained_model" == *gpt* ]]; then
     len=256;
+else
+    echo "Unsupported pretrained_model '$pretrained_model'. Expected a RoBERTa- or GPT-compatible model." >&2
+    exit 2
 fi    
 
-python Grafting.py \
-  --task_name $TASK \
-  --data_dir $DATA_DIR \
-  --model_name_or_path $MODEL \
-  --cache_dir model_files \
-  --few_shot_type $TYPE \
-  --num_k $K \
-  --max_seq_length $len \
-  --max_length_per_example $len \
+MODEL_PATH=$MODEL
+PRETRAINED_MODEL_PATH=$pretrained_model
+if [ "${RESOLVE_HF_MODELS:-true}" != "false" ]; then
+    MODEL_PATH=$($PYTHON_BIN tools/cache_hf_model.py "$MODEL" --cache-dir "$MODEL_CACHE_DIR")
+    PRETRAINED_MODEL_PATH=$($PYTHON_BIN tools/cache_hf_model.py "$pretrained_model" --cache-dir "$MODEL_CACHE_DIR")
+fi
+
+$PYTHON_BIN Grafting.py \
+  --task_name "$TASK" \
+  --data_dir "$DATA_DIR" \
+  --model_name_or_path "$MODEL_PATH" \
+  --cache_dir "$MODEL_CACHE_DIR" \
+  --few_shot_type "$TYPE" \
+  --num_k "$K" \
+  --max_seq_length "$len" \
+  --max_length_per_example "$len" \
   --per_device_eval_batch_size 16 \
-  --per_device_train_batch_size 8\
+  --per_device_train_batch_size 8 \
   --gradient_accumulation_steps 128 \
-  --learning_rate $LR \
-  --num_train_epochs $num_train_epochs\
+  --learning_rate "$LR" \
+  --num_train_epochs "$num_train_epochs" \
   --seed 0 \
-  --no_train $no_train \
-  --template $TEMPLATE \
-  --mapping $MAPPING \
-  --output_dir="temp" \
-  --use_lm_head=$uselmhead \
-  --mask_path=$mask_path \
-  --fix_head $fixhead\
-  --fix_embeddings $fixembeddings\
-  --use_CLS_linearhead $useCLS\
-  --sparsity_level $sparsitylevel \
-  --modelbase $pretrained_model \
-  --truncate_head $truncate_head\
-  --train_bias_only $train_bias_only\
-  --log_file_store $log_file_store\
-  --checkpoint_location $checkpoint_location\
+  --no_train "$no_train" \
+  --template "$TEMPLATE" \
+  --mapping "$MAPPING" \
+  --output_dir "$GRAFT_OUTPUT_DIR" \
+  --use_lm_head "$uselmhead" \
+  --mask_path "$mask_path" \
+  --fix_head "$fixhead" \
+  --fix_embeddings "$fixembeddings" \
+  --use_CLS_linearhead "$useCLS" \
+  --sparsity_level "$sparsitylevel" \
+  --modelbase "$PRETRAINED_MODEL_PATH" \
+  --truncate_head "$truncate_head" \
+  --train_bias_only "$train_bias_only" \
+  --log_file_store "$log_file_store" \
+  --checkpoint_location "$checkpoint_location" \
   $TASK_EXTRA \
-  $1 
+  "$@"
 
 
 

@@ -7,7 +7,8 @@ lr=1e7 ;
 no_train=True; 
 
 
-model_path="../ckpt_paths/log_noembed_SGD_graft/SST-2-prompt-16-0-roberta-base-4384-2-1e-3"
+CKPT_ROOT=${CKPT_ROOT:-ckpt_paths}
+model_path="$CKPT_ROOT/log_noembed_SGD_graft/SST-2-prompt-16-0-roberta-base-4384-2-1e-3"
 mask_path="highest_movement";
 modelbase='roberta-base';
 

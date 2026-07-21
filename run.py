@@ -179,7 +179,7 @@ class DynamicDataTrainingArguments(DataTrainingArguments):
 
     demo_filter_rate: float = field(
         default=0.5,
-        metadata={"help": "Only use top-x\% similar instances in demonstrations"}
+        metadata={"help": "Only use top-x%% similar instances in demonstrations"}
     )
 
     demo_filter_model: str = field(
@@ -245,7 +245,7 @@ class DynamicDataTrainingArguments(DataTrainingArguments):
         default=False,
         metadata={"help": "Whether to use prompt-based fine-tuning"}
     )
-    template_list: List = field(
+    template_list: Optional[List[str]] = field(
         default=None,
         metadata={"help": "(DO NOT List of templates (only initialized after the program starts."}
     )
@@ -517,7 +517,7 @@ def main():
 
         # Pass dataset and argument information to the model
         if data_args.prompt:
-            model.label_word_list = torch.tensor(train_dataset.label_word_list).long().cuda()
+            model.label_word_list = torch.tensor(train_dataset.label_word_list).long().to(training_args.device)
         if output_modes_mapping[data_args.task_name] == 'regression':
             # lower / upper bounds
             model.lb, model.ub = bound_mapping[data_args.task_name]
@@ -636,7 +636,7 @@ def main():
             model = model.to(training_args.device)
             trainer.model = model
             if data_args.prompt:
-                model.label_word_list = torch.tensor(train_dataset.label_word_list).long().cuda()
+                model.label_word_list = torch.tensor(train_dataset.label_word_list).long().to(training_args.device)
             if output_modes_mapping[data_args.task_name] == 'regression':
                 # lower / upper bounds
                 model.lb, model.ub = bound_mapping[data_args.task_name]

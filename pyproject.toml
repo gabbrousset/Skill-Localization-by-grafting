@@ -1,0 +1,40 @@
+[project]
+name = "skill-localization-by-grafting"
+version = "0.1.0"
+description = "Task-specific skill localization in fine-tuned language models"
+readme = "README.md"
+requires-python = ">=3.8,<3.9"
+dependencies = [
+    "datasets==2.4.0",
+    "filelock==3.0.12",
+    "fsspec==2022.1.0",
+    "huggingface-hub==0.4.0",
+    "numpy==1.19.4",
+    "packaging==21.3",
+    "pandas==1.1.5",
+    "pyarrow==6.0.1",
+    "protobuf==3.20.3",
+    "pyyaml==6.0",
+    "scikit-learn==0.24.0",
+    "scipy==1.5.4",
+    "sentence-transformers==0.4.0",
+    "sentencepiece==0.1.94",
+    "torch==2.4.1",
+    "tqdm==4.64.1",
+    "transformers==3.4.0",
+    "wandb==0.15.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["."]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
