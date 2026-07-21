@@ -44,17 +44,13 @@ the experiments on a Linux GPU machine.
 Recommended Apple Silicon setup:
 
 ```bash
-softwareupdate --install-rosetta --agree-to-license
-arch -x86_64 /bin/zsh
-curl -LsSf https://astral.sh/uv/install.sh | sh
-hash -r
 cd /path/to/Skill-Localization-by-grafting
-rm -rf .venv
-uv sync --locked
-uv run python -c "import platform, tokenizers, transformers; print(platform.machine(), tokenizers.__version__, transformers.__version__)"
+bash tools/setup_macos_rosetta.sh
 ```
 
-The final command should print `x86_64 0.9.2 3.4.0`. Full `roberta-base`
+The script installs an x86_64 uv binary under `.uv-macos-x86_64/`, recreates
+`.venv`, and checks that Python reports `x86_64 0.9.2 3.4.0` for
+`platform.machine()`, `tokenizers`, and `transformers`. Full `roberta-base`
 fine-tuning and grafting are expected to run on Linux GPU nodes.
 
 Check that the Python entrypoints import correctly:
@@ -362,6 +358,11 @@ If uv fails on native Apple Silicon with `tokenizers==0.9.2` and a Rust
 `aarch64-apple-darwin` error, switch to the Rosetta/x86_64 setup above. Upgrading
 only `tokenizers` is not compatible with `transformers==3.4.0`, which pins that
 exact tokenizer version.
+
+If uv fails on Apple Silicon with `The current Python platform is not compatible
+with the lockfile's supported environments`, it is still using native arm64.
+Run `bash tools/setup_macos_rosetta.sh` from the repository root, then use
+`.uv-macos-x86_64/bin/uv run ...` for local commands on that Mac.
 
 If a full `roberta-base` run is killed during model loading, use a GPU job with enough memory. The CPU smoke test uses a tiny model to validate setup only.
 
