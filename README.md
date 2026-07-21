@@ -35,6 +35,21 @@ On clusters where `$HOME/.cache` is not writable, use a writable cache directory
 UV_CACHE_DIR=/tmp/uv-cache uv sync --locked
 ```
 
+On Apple Silicon macOS, use the same command. The lockfile resolves `torch==2.4.1`
+from PyPI so uv can install the native macOS arm64 wheel instead of the Linux CUDA
+wheel:
+
+```bash
+uv sync --locked
+```
+
+This repository is still a Python 3.8 research-code environment with several old
+compiled dependencies. If native Apple Silicon installation fails later on a
+package such as `numpy`, `scipy`, `scikit-learn`, `pandas`, `sentencepiece`, or
+`tokenizers`, use an x86_64/Rosetta Python 3.8 environment on that Mac, or run the
+full experiments on a Linux GPU machine. Full `roberta-base` fine-tuning and
+grafting are expected to run on Linux GPU nodes.
+
 Check that the Python entrypoints import correctly:
 
 ```bash
@@ -335,6 +350,11 @@ find ../data/k-shot -maxdepth 3 -type d | sort | head
 ```
 
 If old Transformers cannot load `roberta-base` directly, leave `RESOLVE_HF_MODELS` enabled so `tools/cache_hf_model.py` downloads a local compatible layout.
+
+If uv fails on macOS Apple Silicon with an error like `torch==2.4.1+cu121` has no
+wheel for `macosx_..._arm64`, pull the latest repository changes and rerun
+`uv sync --locked`. Older lockfiles forced the Linux CUDA PyTorch index for every
+platform; the current lock uses PyPI so uv can select the macOS arm64 torch wheel.
 
 If a full `roberta-base` run is killed during model loading, use a GPU job with enough memory. The CPU smoke test uses a tiny model to validate setup only.
 
