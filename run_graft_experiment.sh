@@ -35,12 +35,18 @@ if [ -z "${DATA_ROOT:-}" ]; then
 fi
 LOG_ROOT=${LOG_ROOT:-log_files}
 MODEL_CACHE_DIR=${MODEL_CACHE_DIR:-model_files}
+CKPT_ROOT=${CKPT_ROOT:-ckpt_paths}
+DATA_CACHE_ROOT=${DATA_CACHE_ROOT:-$CKPT_ROOT/data_cache}
 GRAFT_OUTPUT_DIR=${GRAFT_OUTPUT_DIR:-temp}
 export WANDB_DISABLED=${WANDB_DISABLED:-true}
 export WANDB_MODE=${WANDB_MODE:-disabled}
+export HF_HOME=${HF_HOME:-$MODEL_CACHE_DIR/huggingface}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HOME/datasets}
 
 if [ -z "${PYTHON_BIN:-}" ]; then
-    if command -v uv >/dev/null 2>&1; then
+    if [ -x "$SCRIPT_DIR/.uv-macos-x86_64/bin/uv" ]; then
+        PYTHON_BIN="$SCRIPT_DIR/.uv-macos-x86_64/bin/uv run --project . python"
+    elif command -v uv >/dev/null 2>&1; then
         PYTHON_BIN="uv run --project . python"
     else
         PYTHON_BIN="python"
@@ -151,9 +157,11 @@ esac
 # a maximum batch size of 2 when using large-size models. So we use gradient
 # accumulation steps to achieve the same effect of larger batch sizes.
 DATA_DIR=$DATA_ROOT/$TASK/$K-$SEED
+DATA_CACHE_DIR=$DATA_CACHE_ROOT/$TASK/$K-$SEED
 log_file_store=$LOG_ROOT/log_noembed_SGD_graft
+CHECKPOINT_DIR=$(dirname "$checkpoint_location")
 
-mkdir -p "$(dirname "$log_file_store")" "$MODEL_CACHE_DIR" "$GRAFT_OUTPUT_DIR"
+mkdir -p "$(dirname "$log_file_store")" "$MODEL_CACHE_DIR" "$DATA_CACHE_DIR" "$GRAFT_OUTPUT_DIR" "$CHECKPOINT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE"
 
 if [ ! -d "$DATA_DIR" ]; then
     echo "Missing data directory: $DATA_DIR" >&2
@@ -180,6 +188,7 @@ fi
 $PYTHON_BIN Grafting.py \
   --task_name "$TASK" \
   --data_dir "$DATA_DIR" \
+  --data_cache_dir "$DATA_CACHE_DIR" \
   --model_name_or_path "$MODEL_PATH" \
   --cache_dir "$MODEL_CACHE_DIR" \
   --few_shot_type "$TYPE" \

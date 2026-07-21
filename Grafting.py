@@ -1,5 +1,4 @@
 """Finetuning the library models for sequence classification on GLUE."""
-from datasets import load_metric    
 import dataclasses
 import logging
 import os
@@ -128,6 +127,10 @@ class DynamicDataTrainingArguments(DataTrainingArguments):
     num_k: Optional[int] = field(
         default=16,
         metadata={"help": "Number of training instances per class"}
+    )
+    data_cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Directory for processed dataset feature caches. Defaults to data_dir."}
     )
 
     num_sample: Optional[int] = field(
@@ -471,11 +474,10 @@ def main():
         )
 
         
-    data_cache_dir = data_args.data_dir
+    data_cache_dir = data_args.data_cache_dir if data_args.data_cache_dir is not None else data_args.data_dir
     if data_args.autoregressive:
-        data_cache_dir += '_autoregressive'
-    if not os.path.exists(data_cache_dir):
-        os.mkdir(data_cache_dir)
+        data_cache_dir = os.path.join(data_cache_dir, "autoregressive")
+    os.makedirs(data_cache_dir, exist_ok=True)
     
     if data_args.autoregressive:
         dataset_class = gptDataset
@@ -620,7 +622,7 @@ def main():
     for param in finetuned_model.parameters():
         param.requires_grad = False
     
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")        
+    device = training_args.device
     
     model.to(device)
     finetuned_model.to("cpu")

@@ -338,6 +338,28 @@ Important grafting variables:
 * `checkpoint_location`: where to save or load the trained mask
 * `no_train`: `False` to train a mask, `True` to load `checkpoint_location`
 
+## Figure 8-like Mask Workflow
+
+The paper's Figure 8 is a multi-task graft-region overlap/effect analysis. This
+repository does not include the original multi-task training or plotting code,
+but it now includes a reproducible single-task Figure 8-like mask workflow:
+
+```bash
+bash experiments/figure8_like/run_mask_grid.sh
+```
+
+On a Slurm GPU cluster:
+
+```bash
+bash experiments/figure8_like/submit_slurm_mask_grid.sh
+```
+
+The default task list is `SST-2 cr SNLI MNLI QNLI QQP MRPC`, matching the
+Figure 8 tasks currently present in `../data/k-shot`. The paper also uses AG
+News; add `ag_news` to `TASKS` only after preparing its k-shot data. See
+`experiments/figure8_like/README.md` for overrides, smoke tests, and overlap CSV
+generation.
+
 ## Troubleshooting
 
 If `uv` tries to use a parent workspace with the wrong Python version, run commands from this repository root. This repository declares its own uv workspace in `pyproject.toml`.

@@ -7,11 +7,35 @@ from torch.utils.data.dataset import Dataset
 from tqdm import tqdm
 import math 
 from transformers import get_constant_schedule_with_warmup, get_constant_schedule, get_linear_schedule_with_warmup
-from datasets import load_metric    
+
+
+class _MetricAccumulator:
+    def __init__(self, name):
+        self.name = name
+        self.predictions = []
+        self.references = []
+
+    def add_batch(self, predictions, references):
+        self.predictions.extend(predictions.detach().cpu().view(-1).tolist())
+        self.references.extend(references.detach().cpu().view(-1).tolist())
+
+    def compute(self):
+        if not self.references:
+            return {self.name: 0.0}
+
+        if self.name == "accuracy":
+            correct = sum(int(pred == ref) for pred, ref in zip(self.predictions, self.references))
+            return {"accuracy": correct / float(len(self.references))}
+
+        true_positive = sum(int(pred == ref == 1) for pred, ref in zip(self.predictions, self.references))
+        false_positive = sum(int(pred == 1 and ref != 1) for pred, ref in zip(self.predictions, self.references))
+        false_negative = sum(int(pred != 1 and ref == 1) for pred, ref in zip(self.predictions, self.references))
+        denom = (2 * true_positive) + false_positive + false_negative
+        return {"f1": 0.0 if denom == 0 else (2 * true_positive) / float(denom)}
 
 class graft_Trainer(nn.Module):
     def __init__(self, model_trainer):
-        
+
         super(graft_Trainer, self).__init__()
         self.trainer = model_trainer
         self.model   = self.trainer.model
@@ -121,15 +145,19 @@ class graft_Trainer(nn.Module):
         sparsity_level =  self.model_args.sparsity_level
         
         
+        if mask_path in ["zero", "none", "empty"]:
+            basepatch = [torch.zeros_like(p, requires_grad=False) for p in self.trainable_parameters]
+            print ('Total parameters in my stitch: ', sum([ torch.sum(p*p) / (1. * num_params) for p in basepatch ]))
+
         #If mask is already stored somewhere, I simply load it!
-        if mask_path != "highest_movement":
+        elif mask_path != "highest_movement":
             basepatch = torch.load(mask_path, map_location=self.device)
 
             
             total = max([ torch.amax(p) for p in basepatch ])
             #if the max value is greater than 1., it means we have received masks without sigmoid
             if total > 1.:
-                basepatch[mask_counter] = [ sigmoid( p - sigmoid_bias ) for p in basepatch ]
+                basepatch = [ sigmoid( p - sigmoid_bias ) for p in basepatch ]
             
             basepatch = [ torch.round( torch.clip (p, 0., 1.) )  for p in basepatch ]
             print ('Total parameters in my graft: ', sum([ torch.sum(p*p) / (1. * num_params) for p in basepatch ]))
@@ -138,6 +166,11 @@ class graft_Trainer(nn.Module):
         elif mask_path == "highest_movement":
 
             threshold = int(sparsity_level * num_params)
+            if threshold <= 0:
+                basepatch = [torch.zeros_like(p, requires_grad=False) for p in self.trainable_parameters]
+                print ('Total parameters in my stitch: ', sum([ torch.sum(p*p) / (1. * num_params) for p in basepatch ]))
+                self.basepatch = basepatch
+                return
             
             best_top = np.zeros(threshold)
 
@@ -174,9 +207,9 @@ class graft_Trainer(nn.Module):
     ########################################################################################################################   
     def evaluate(self, dataloader, task_name, mode='dev'):
         if task_name.lower() not in [ 'qqp', 'mrpc' ]: 
-            metric = load_metric("accuracy")
+            metric = _MetricAccumulator("accuracy")
         else:
-            metric = load_metric("f1")
+            metric = _MetricAccumulator("f1")
             
         self.model.eval()
         hidden_states = []
@@ -329,9 +362,4 @@ class graft_Trainer(nn.Module):
             self.reset_model()      
 
     ########################################################################################################################
-    
-        
-        
-        
-        
         

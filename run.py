@@ -103,6 +103,10 @@ class DynamicDataTrainingArguments(DataTrainingArguments):
         default=16,
         metadata={"help": "Number of training instances per class"}
     )
+    data_cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Directory for processed dataset feature caches. Defaults to data_dir."}
+    )
 
     num_sample: Optional[int] = field(
         default=16,
@@ -448,11 +452,10 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    data_cache_dir = data_args.data_dir
+    data_cache_dir = data_args.data_cache_dir if data_args.data_cache_dir is not None else data_args.data_dir
     if data_args.autoregressive:
-        data_cache_dir += '_autoregressive'
-    if not os.path.exists(data_cache_dir):
-        os.mkdir(data_cache_dir)
+        data_cache_dir = os.path.join(data_cache_dir, "autoregressive")
+    os.makedirs(data_cache_dir, exist_ok=True)
     
     if data_args.autoregressive:
         dataset_class = gptDataset

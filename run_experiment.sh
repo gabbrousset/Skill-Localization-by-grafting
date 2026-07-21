@@ -37,11 +37,16 @@ fi
 LOG_ROOT=${LOG_ROOT:-log_files}
 CKPT_ROOT=${CKPT_ROOT:-ckpt_paths}
 MODEL_CACHE_DIR=${MODEL_CACHE_DIR:-model_files}
+DATA_CACHE_ROOT=${DATA_CACHE_ROOT:-$CKPT_ROOT/data_cache}
 export WANDB_DISABLED=${WANDB_DISABLED:-true}
 export WANDB_MODE=${WANDB_MODE:-disabled}
+export HF_HOME=${HF_HOME:-$MODEL_CACHE_DIR/huggingface}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HOME/datasets}
 
 if [ -z "${PYTHON_BIN:-}" ]; then
-    if command -v uv >/dev/null 2>&1; then
+    if [ -x "$SCRIPT_DIR/.uv-macos-x86_64/bin/uv" ]; then
+        PYTHON_BIN="$SCRIPT_DIR/.uv-macos-x86_64/bin/uv run --project . python"
+    elif command -v uv >/dev/null 2>&1; then
         PYTHON_BIN="uv run --project . python"
     else
         PYTHON_BIN="python"
@@ -163,10 +168,12 @@ GS=$(expr "$BS" / "$REAL_BS")
 # Use a random number to distinguish different trails (avoid accidental overwriting)
 TRIAL_IDTF=$RANDOM
 DATA_DIR=$DATA_ROOT/$TASK/$K-$SEED
+DATA_CACHE_DIR=$DATA_CACHE_ROOT/$TASK/$K-$SEED
 log_file_store=$LOG_ROOT/log_noembed_SGD_graft
 output_dir=$CKPT_ROOT/log_noembed_SGD_graft/$TASK-$TYPE-$K-$SEED-$MODELNAME_SAFE-$TRIAL_IDTF-$REAL_BS-$LR
+output_dir=${OUTPUT_DIR:-$output_dir}
 
-mkdir -p "$(dirname "$log_file_store")" "$(dirname "$output_dir")" "$MODEL_CACHE_DIR"
+mkdir -p "$(dirname "$log_file_store")" "$(dirname "$output_dir")" "$MODEL_CACHE_DIR" "$DATA_CACHE_DIR" "$HF_HOME" "$HF_DATASETS_CACHE"
 
 if [ ! -d "$DATA_DIR" ]; then
     echo "Missing data directory: $DATA_DIR" >&2
@@ -195,6 +202,7 @@ fi
 $PYTHON_BIN run.py \
   --task_name "$TASK" \
   --data_dir "$DATA_DIR" \
+  --data_cache_dir "$DATA_CACHE_DIR" \
   --overwrite_output_dir \
   --do_train \
   --do_eval \
