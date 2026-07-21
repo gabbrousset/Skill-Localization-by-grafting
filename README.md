@@ -46,12 +46,14 @@ Recommended Apple Silicon setup:
 ```bash
 cd /path/to/Skill-Localization-by-grafting
 bash tools/setup_macos_rosetta.sh
+export PATH="$PWD/.uv-macos-x86_64/bin:$PATH"
 ```
 
-The script installs an x86_64 uv binary under `.uv-macos-x86_64/`, recreates
-`.venv`, and checks that Python reports `x86_64 0.9.2 3.4.0` for
-`platform.machine()`, `tokenizers`, and `transformers`. Full `roberta-base`
-fine-tuning and grafting are expected to run on Linux GPU nodes.
+The script downloads the `uv-x86_64-apple-darwin` release directly, installs a
+repo-local x86_64 Python under `.uv-macos-x86_64/`, recreates `.venv`, and checks
+that Python reports `x86_64 0.9.2 3.4.0` for `platform.machine()`, `tokenizers`,
+and `transformers`. Full `roberta-base` fine-tuning and grafting are expected to
+run on Linux GPU nodes.
 
 Check that the Python entrypoints import correctly:
 
