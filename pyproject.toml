@@ -19,7 +19,8 @@ dependencies = [
     "scipy==1.5.4",
     "sentence-transformers==0.4.0",
     "sentencepiece==0.1.94",
-    "torch==2.4.1",
+    "torch==2.4.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "tqdm==4.64.1",
     "transformers==3.4.0",
     "wandb==0.15.0",
@@ -27,6 +28,10 @@ dependencies = [
 
 [tool.uv]
 package = false
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
 
 [tool.uv.workspace]
 members = ["."]
